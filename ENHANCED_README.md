@@ -36,7 +36,7 @@ An advanced Super Mario-inspired side-scrolling platformer game built with Pytho
 ## Setup
 
 1. Install requirements: `pip install -r requirements.txt`
-2. Run the game: `python run_enhanced_game.py`
+2. Run the game: `python run_game.py`
 
 ## Game Elements
 

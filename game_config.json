@@ -1,0 +1,43 @@
+{
+    "game_settings": {
+        "screen_width": 800,
+        "screen_height": 600,
+        "fps": 60,
+        "gravity": 0.8,
+        "jump_strength": -15,
+        "move_speed": 5
+    },
+    "player_stats": {
+        "max_health": 100,
+        "max_invincible_time": 60,
+        "attack_damage": 30,
+        "attack_range": 50,
+        "max_attack_cooldown": 20,
+        "lives": 3
+    },
+    "enemy_stats": {
+        "max_health": 50,
+        "speed": 2,
+        "attack_damage": 25,
+        "max_attack_cooldown": 90,
+        "move_limit": 100
+    },
+    "controls": {
+        "left": "K_LEFT",
+        "right": "K_RIGHT",
+        "jump": "K_SPACE",
+        "pause": "K_ESCAPE",
+        "restart": "K_r",
+        "next_level": "K_n"
+    },
+    "colors": {
+        "white": [255, 255, 255],
+        "blue": [0, 0, 255],
+        "green": [0, 255, 0],
+        "red": [255, 0, 0],
+        "brown": [139, 69, 19],
+        "yellow": [255, 255, 0],
+        "black": [0, 0, 0],
+        "sky_blue": [135, 206, 235]
+    }
+}

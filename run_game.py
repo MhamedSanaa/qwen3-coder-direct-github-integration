@@ -17,8 +17,8 @@ def main():
         import pygame
         print("Pygame installed successfully!")
     
-    # Run the main game
-    import mario_game
+    # Run the enhanced game
+    import enhanced_mario_game
 
 if __name__ == "__main__":
     main()
