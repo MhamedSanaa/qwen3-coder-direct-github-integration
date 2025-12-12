@@ -19,6 +19,10 @@ GREEN = (0, 255, 0)
 RED = (255, 0, 0)
 BROWN = (139, 69, 19)
 YELLOW = (255, 255, 0)
+BLACK = (0, 0, 0)
+PURPLE = (128, 0, 128)
+ORANGE = (255, 165, 0)
+PINK = (255, 192, 203)
 SKY_BLUE = (135, 206, 235)
 
 class Player(pygame.sprite.Sprite):
@@ -33,7 +37,28 @@ class Player(pygame.sprite.Sprite):
         self.jumping = False
         self.direction = 1  # 1 for right, -1 for left
         
+        # Health and attack properties
+        self.health = 100
+        self.max_health = 100
+        self.invincible = False  # Invincibility after being hit
+        self.invincible_timer = 0
+        self.max_invincible_time = 60  # Frames of invincibility
+        self.attack_cooldown = 0  # Cooldown for attacking enemies
+        self.max_attack_cooldown = 20  # Frames between attacks
+        self.attack_range = 50  # Range at which player can kill enemies
+        self.attack_damage = 30  # Damage dealt to enemies when attacking from above
+        
     def update(self, platforms):
+        # Update invincibility timer
+        if self.invincible:
+            self.invincible_timer -= 1
+            if self.invincible_timer <= 0:
+                self.invincible = False
+        
+        # Update attack cooldown
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
+
         # Handle horizontal movement
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
@@ -63,6 +88,35 @@ class Player(pygame.sprite.Sprite):
                 self.rect.top = platform.rect.bottom
                 self.vel_y = 0
 
+    def take_damage(self, damage):
+        if not self.invincible:
+            self.health -= damage
+            self.invincible = True
+            self.invincible_timer = self.max_invincible_time
+            if self.health <= 0:
+                self.health = 0
+
+    def attack_enemy(self, enemy):
+        """Attack an enemy from above"""
+        if self.attack_cooldown == 0 and self.rect.bottom <= enemy.rect.top + 10:
+            enemy.take_damage(self.attack_damage)
+            self.attack_cooldown = self.max_attack_cooldown
+            # Bounce off enemy
+            self.vel_y = JUMP_STRENGTH * 0.7  # Small bounce
+            return True
+        return False
+
+    def draw_health_bar(self, screen, camera_x):
+        """Draw health bar above player"""
+        bar_width = 50
+        bar_height = 6
+        health_width = int((self.health / self.max_health) * bar_width)
+        
+        # Draw background (red)
+        pygame.draw.rect(screen, RED, (self.rect.x - camera_x, self.rect.y - 15, bar_width, bar_height))
+        # Draw health (green)
+        pygame.draw.rect(screen, GREEN, (self.rect.x - camera_x, self.rect.y - 15, health_width, bar_height))
+
 class Platform(pygame.sprite.Sprite):
     def __init__(self, x, y, width, height):
         super().__init__()
@@ -83,13 +137,74 @@ class Enemy(pygame.sprite.Sprite):
         self.speed = 2
         self.direction = 1
         
-    def update(self, platforms):
+        # Health and combat properties
+        self.health = 50
+        self.max_health = 50
+        self.alive = True
+        self.attack_range = 40  # Range at which enemy can attack player
+        self.attack_damage = 25  # Damage dealt to player
+        self.attack_cooldown = 0  # Cooldown between attacks
+        self.max_attack_cooldown = 90  # Frames between attacks
+        self.move_counter = 0
+        self.move_limit = 100  # How far the enemy moves before turning around
+
+    def update(self, platforms, player):
+        if not self.alive:
+            return
+            
+        # Update attack cooldown
+        if self.attack_cooldown > 0:
+            self.attack_cooldown -= 1
+
+        # Move horizontally
         self.rect.x += self.speed * self.direction
-        
-        # Simple AI: turn around at edges of platforms
-        # For now, just reverse direction when hitting screen boundaries
-        if self.rect.left <= 0 or self.rect.right >= SCREEN_WIDTH:
+        self.move_counter += 1
+
+        # Change direction if moved too far or hit a boundary
+        if self.move_counter >= self.move_limit or self.rect.left <= 0 or self.rect.right >= SCREEN_WIDTH * 2:
             self.direction *= -1
+            self.move_counter = 0
+
+        # Make sure enemy stays on platforms
+        on_platform = False
+        for platform in platforms:
+            if self.rect.colliderect(platform.rect):
+                if self.rect.bottom <= platform.rect.top + 10:  # Slightly above the platform
+                    self.rect.bottom = platform.rect.top
+                    on_platform = True
+                    break
+
+        # If not on platform, fall down
+        if not on_platform:
+            self.rect.y += 5  # Simple gravity for enemies
+
+        # Check for attack on player
+        distance_to_player = abs(self.rect.centerx - player.rect.centerx)
+        if distance_to_player < self.attack_range and self.attack_cooldown == 0:
+            if pygame.Rect.colliderect(self.rect, player.rect):
+                player.take_damage(self.attack_damage)
+                self.attack_cooldown = self.max_attack_cooldown
+
+    def take_damage(self, damage):
+        self.health -= damage
+        if self.health <= 0:
+            self.health = 0
+            self.alive = False
+            self.kill()  # Remove from all sprite groups
+
+    def draw_health_bar(self, screen, camera_x):
+        """Draw health bar above enemy"""
+        if not self.alive:
+            return
+            
+        bar_width = 30
+        bar_height = 4
+        health_width = int((self.health / self.max_health) * bar_width)
+        
+        # Draw background (red)
+        pygame.draw.rect(screen, RED, (self.rect.x - camera_x, self.rect.y - 8, bar_width, bar_height))
+        # Draw health (green)
+        pygame.draw.rect(screen, GREEN, (self.rect.x - camera_x, self.rect.y - 8, health_width, bar_height))
 
 class Coin(pygame.sprite.Sprite):
     def __init__(self, x, y):
@@ -171,10 +286,24 @@ class Game:
     def update(self):
         # Update all sprites
         self.player.update(self.platforms)
-        self.enemies.update(self.platforms)
+        for enemy in self.enemies:
+            enemy.update(self.platforms, self.player)
         
         # Check for collisions with coins
         coin_collisions = pygame.sprite.spritecollide(self.player, self.coins, True)
+        
+        # Check for collisions between player and enemies
+        enemy_hits = pygame.sprite.spritecollide(self.player, self.enemies, False)
+        for enemy in enemy_hits:
+            if enemy.alive and self.player.rect.colliderect(enemy.rect):
+                # Check if player is jumping on enemy from above
+                if self.player.rect.bottom <= enemy.rect.top + 10 and self.player.vel_y > 0:
+                    # Player jumps on enemy
+                    self.player.attack_enemy(enemy)
+                else:
+                    # Enemy hits player
+                    if not self.player.invincible:
+                        self.player.take_damage(enemy.attack_damage)
         
         # Update camera to follow player
         self.camera_x = self.player.rect.x - SCREEN_WIDTH // 3
@@ -189,13 +318,33 @@ class Game:
         
         # Draw all sprites relative to camera position
         for sprite in self.all_sprites:
+            if isinstance(sprite, Enemy) and not sprite.alive:
+                continue  # Don't draw dead enemies
+                
             screen_x = sprite.rect.x - self.camera_x
-            self.screen.blit(sprite.image, (screen_x, sprite.rect.y))
+            
+            # Draw player with invincibility effect
+            if isinstance(sprite, Player) and sprite.invincible and sprite.invincible_timer % 6 < 3:
+                # Flash during invincibility
+                flash_image = pygame.Surface((sprite.rect.width, sprite.rect.height))
+                flash_image.fill((255, 100, 100))  # Lighter red when invincible
+                self.screen.blit(flash_image, (screen_x, sprite.rect.y))
+            else:
+                self.screen.blit(sprite.image, (screen_x, sprite.rect.y))
+        
+        # Draw health bars for player and enemies
+        self.player.draw_health_bar(self.screen, self.camera_x)
+        for enemy in self.enemies:
+            enemy.draw_health_bar(self.screen, self.camera_x)
         
         # Draw score
         font = pygame.font.SysFont(None, 36)
         score_text = font.render(f"Coins: {len(self.coins)}", True, WHITE)
         self.screen.blit(score_text, (10, 10))
+        
+        # Draw player health
+        health_text = font.render(f"Health: {self.player.health}", True, WHITE)
+        self.screen.blit(health_text, (10, 50))
         
         pygame.display.flip()
     
@@ -203,6 +352,40 @@ class Game:
         running = True
         while running:
             running = self.handle_events()
+            
+            # Check if player is dead
+            if self.player.health <= 0:
+                # Display game over screen
+                font = pygame.font.SysFont(None, 72)
+                game_over_text = font.render("GAME OVER", True, RED)
+                text_rect = game_over_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2))
+                
+                self.screen.fill(SKY_BLUE)
+                self.screen.blit(game_over_text, text_rect)
+                
+                restart_font = pygame.font.SysFont(None, 36)
+                restart_text = restart_font.render("Press R to Restart or ESC to Quit", True, WHITE)
+                restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH//2, SCREEN_HEIGHT//2 + 50))
+                self.screen.blit(restart_text, restart_rect)
+                
+                pygame.display.flip()
+                
+                # Wait for restart or quit input
+                waiting = True
+                while waiting:
+                    for event in pygame.event.get():
+                        if event.type == pygame.QUIT:
+                            pygame.quit()
+                            sys.exit()
+                        if event.type == pygame.KEYDOWN:
+                            if event.key == pygame.K_r:
+                                # Restart the game
+                                self.__init__()  # Reinitialize the game
+                                waiting = False
+                            elif event.key == pygame.K_ESCAPE:
+                                pygame.quit()
+                                sys.exit()
+            
             self.update()
             self.draw()
             self.clock.tick(FPS)
